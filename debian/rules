@@ -1,0 +1,48 @@
+#!/usr/bin/make -f
+# The dependencies are vendored into the package: nothing is downloaded or built
+# on the controller. Node.js itself comes from the distribution (Depends: nodejs),
+# so its security updates arrive through the Wiren Board / Debian repository.
+export DH_VERBOSE = 1
+
+PACKAGE := wb-nodejs-service-template
+VERSION := $(shell dpkg-parsechangelog --show-field Version | sed 's/-[^-]*$$//')
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	npm ci --omit=dev --no-audit --no-fund
+	# Runtime needs neither sourcemaps, nor type declarations, nor the CommonJS
+	# build: the service is ESM. On the mqtt tree of this template that is
+	# 7.8 MB -> 3.9 MB; on a heavier one the saving is proportionally bigger.
+	# NOTE: do not strip src/ across the tree — some packages (debug) point their
+	# entry point there and the tree stops loading.
+	find node_modules -name '*.map' -delete
+	find node_modules \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' \) -delete
+	find node_modules -type d -name cjs -prune -exec rm -rf {} +
+	# Architecture: all invariant — a native module in the tree would make the
+	# package arch-specific without anyone noticing. Fail the build instead.
+	test -z "$$(find node_modules -name '*.node' -print -quit)"
+	# CRA: ship a CycloneDX SBOM of the vendored tree. npm sbom refuses to run
+	# without a version in package.json, so set the real one and put the
+	# placeholder straight back: a build must not leave the sources modified.
+	npm pkg set version=$(VERSION)
+	npm sbom --sbom-format cyclonedx --omit=dev --omit=optional > sbom.cdx.json
+	npm pkg set version=0.0.0
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	# Bare --test discovers tests/*.test.js itself; a directory argument
+	# is not accepted by every Node version.
+	node --test
+endif
+
+override_dh_install:
+	dh_install
+	# The single source of the version is debian/changelog. Stamp it into the
+	# installed copy, not into src/: a build must not modify the source tree.
+	sed -i "s/^export const VERSION = .*/export const VERSION = '$(VERSION)';/" \
+		debian/$(PACKAGE)/usr/lib/$(PACKAGE)/main.js
+
+override_dh_auto_clean:
+	rm -rf node_modules sbom.cdx.json

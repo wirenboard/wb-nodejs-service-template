@@ -1,0 +1,16 @@
+[Unit]
+Description=WB Node.js Service Template
+After=NetworkManager.service mosquitto.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/wb-nodejs-service-template
+Restart=on-failure
+RestartSec=10
+RestartPreventExitStatus=2 6
+SuccessExitStatus=7
+
+# Required for autostart on boot (enable + start). Remove if not needed.
+[Install]
+WantedBy=multi-user.target
