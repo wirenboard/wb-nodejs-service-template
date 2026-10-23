@@ -1,0 +1,24 @@
+Source: wb-nodejs-service-template
+Maintainer: Wiren Board team <info@wirenboard.com>
+Section: misc
+Priority: optional
+Standards-Version: 4.5.1
+# No npm here: it ships with nodejs, and Debian's npm package conflicts with it.
+Build-Depends: debhelper-compat (= 13),
+               nodejs (>= 22.13)
+Homepage: https://github.com/wirenboard/wb-nodejs-service-template
+
+Package: wb-nodejs-service-template
+Architecture: all
+Depends: ${misc:Depends},
+         nodejs (>= 22.13)
+Recommends: mosquitto
+Description: Network traffic of the controller as a device
+ Publishes a virtual device with the receive rate of a network interface, the
+ peak rate since the last reset and the uptime of the service itself, so the
+ traffic of the controller is visible in the web interface and usable in rules.
+ .
+ The package doubles as the template of a Node.js service for Wiren Board: the
+ systemd unit, the config with a schema for the web interface, the tests and the
+ packaging are meant to be copied. Dependencies are vendored at build time, so
+ the controller needs no network and no compilation.

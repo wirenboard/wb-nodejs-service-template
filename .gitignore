@@ -1,0 +1,7 @@
+.devcontainer/
+.vscode/
+
+# Node
+node_modules/
+sbom.cdx.json
+npm-debug.log*
