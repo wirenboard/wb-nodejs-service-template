@@ -33,6 +33,9 @@ const SIGNALS = ['SIGTERM', 'SIGINT', 'SIGHUP'];
 // A stop must never outlive this, whatever the broker is doing. Without it systemd
 // waits out TimeoutStopSec (90 s by default) and then kills the service.
 const STOP_TIMEOUT_MS = 3000;
+// setInterval keeps its delay in a signed 32-bit integer of milliseconds. A larger
+// one silently becomes 1 ms, and the service hammers the interface every tick.
+const MAX_UPDATE_INTERVAL_S = 2147483;
 
 // From the quietest to the most talkative. A level lets the user up the detail
 // without a rebuild, and keeps the journal readable the rest of the time.
@@ -117,8 +120,9 @@ export function loadConfig(path) {
     if (typeof config.interface !== 'string' || config.interface === '') {
         throw new Error('interface must be the name of a network interface');
     }
-    if (typeof config.update_interval !== 'number' || config.update_interval <= 0) {
-        throw new Error('update_interval must be a positive number of seconds');
+    if (typeof config.update_interval !== 'number' || config.update_interval <= 0
+        || config.update_interval > MAX_UPDATE_INTERVAL_S) {
+        throw new Error(`update_interval must be a number of seconds between 1 and ${MAX_UPDATE_INTERVAL_S}`);
     }
     // Optional: the quiet default suits a service nobody is debugging right now.
     config.log_level = config.log_level ?? DEFAULT_LOG_LEVEL;
