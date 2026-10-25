@@ -15,8 +15,9 @@ Depends: ${misc:Depends},
 Recommends: mosquitto
 Description: Network traffic of the controller as a device
  Publishes a virtual device with the receive rate of a network interface, the
- peak rate since the last reset and the uptime of the service itself, so the
- traffic of the controller is visible in the web interface and usable in rules.
+ peak rate since the last reset, the uptime of the service itself and a button
+ that resets the peak, so the traffic of the controller is visible in the web
+ interface and usable in rules.
  .
  The package doubles as the template of a Node.js service for Wiren Board: the
  systemd unit, the config with a schema for the web interface, the tests and the
