@@ -123,9 +123,11 @@ export function loadConfig(path) {
     if (typeof config.interface !== 'string' || config.interface === '') {
         throw new Error('interface must be the name of a network interface');
     }
-    if (typeof config.update_interval !== 'number' || config.update_interval <= 0
+    // Whole seconds, like the schema the web interface validates against: a config
+    // the interface refuses must not be accepted from the file either.
+    if (!Number.isInteger(config.update_interval) || config.update_interval < 1
         || config.update_interval > MAX_UPDATE_INTERVAL_S) {
-        throw new Error(`update_interval must be a number of seconds between 1 and ${MAX_UPDATE_INTERVAL_S}`);
+        throw new Error(`update_interval must be a whole number of seconds between 1 and ${MAX_UPDATE_INTERVAL_S}`);
     }
     // Optional: the quiet default suits a service nobody is debugging right now.
     config.log_level = config.log_level ?? DEFAULT_LOG_LEVEL;

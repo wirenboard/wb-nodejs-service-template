@@ -71,6 +71,8 @@ test('an unusable config returns config error', () => {
         configFile('{"update_interval": 10}'),
         configFile('{"interface": "eth0", "update_interval": 0}'),
         configFile('{"interface": "eth0", "update_interval": "10"}'),
+        // The schema says integer, so the file is held to the same rule.
+        configFile('{"interface": "eth0", "update_interval": 0.5}'),
         // Above this setInterval overflows and fires every millisecond instead.
         configFile('{"interface": "eth0", "update_interval": 2147484}'),
         configFile('{"interface": "eth0", "update_interval": 1, "log_level": "loud"}'),
