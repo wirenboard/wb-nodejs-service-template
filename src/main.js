@@ -371,8 +371,11 @@ export class TrafficService {
      */
     run() {
         this.client = mqtt.connect(MQTT_URL, {
+            // An error topic carries the flags r, w and p, not prose: see the Wiren
+            // Board conventions, section Errors. 'r' is the closest for a service that
+            // died, the values it published are the last known good ones.
             will: {
-                topic: `${DEVICE_TOPIC}/meta/error`, payload: 'service died', retain: true, qos: 0,
+                topic: `${DEVICE_TOPIC}/meta/error`, payload: 'r', retain: true, qos: 0,
             },
             // Do not keep QoS 0 messages while the broker is away. A reconnect
             // republishes the whole device, so measurements taken meanwhile are
