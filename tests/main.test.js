@@ -19,6 +19,7 @@ import path from 'node:path';
 import {
     DEFAULT_CONFIG_PATH,
     EXIT_CONFIG_ERROR,
+    EXIT_INVALID_ARGUMENT,
     EXIT_SUCCESS,
     CONTROL,
     DEVICE,
@@ -60,6 +61,13 @@ test('config path defaults to the packaged one and can be overridden', () => {
     assert.equal(parseArgs(['node', 'svc']).configPath, DEFAULT_CONFIG_PATH);
     assert.equal(parseArgs(['node', 'svc', '-c', '/tmp/a.conf']).configPath, '/tmp/a.conf');
     assert.equal(parseArgs(['node', 'svc', '--config', '/tmp/b.conf']).configPath, '/tmp/b.conf');
+});
+
+test('a command line it does not understand returns invalid argument', () => {
+    // Code 2 is in RestartPreventExitStatus too, so a typo in the unit does not
+    // turn into a restart loop either.
+    assert.equal(main(['node', 'svc', '--verbose']), EXIT_INVALID_ARGUMENT);
+    assert.equal(main(['node', 'svc', '-c']), EXIT_INVALID_ARGUMENT);
 });
 
 test('an unusable config returns config error', () => {

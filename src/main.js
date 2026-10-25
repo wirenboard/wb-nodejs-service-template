@@ -16,12 +16,14 @@ import { pathToFileURL } from 'node:url';
 
 import mqtt from 'mqtt';
 
-// The same set as in the Python template: a service of Wiren Board answers with
-// the same codes whatever it is written in.
+// LSB exit codes, the same set as in the Python template: a service of Wiren
+// Board answers with the same codes whatever it is written in.
 export const EXIT_SUCCESS = 0;
 export const EXIT_FAILURE = 1;
-// The systemd unit lists this code in RestartPreventExitStatus: a broken config
-// must not send the service into a restart loop.
+// Both are listed in RestartPreventExitStatus in the unit: restarting a service
+// started with the wrong arguments or left with a broken config changes nothing,
+// it would only loop.
+export const EXIT_INVALID_ARGUMENT = 2;
 export const EXIT_CONFIG_ERROR = 6;
 
 export const DEFAULT_CONFIG_PATH = '/etc/wb-nodejs-service-template.conf';
@@ -98,6 +100,10 @@ export function commandTopic(control) {
 
 export const RESET_TOPIC = commandTopic(CONTROL.reset);
 
+/**
+ * Reads the command line. Throws on anything it does not know; the caller turns
+ * that into EXIT_INVALID_ARGUMENT.
+ */
 export function parseArgs(argv) {
     const args = argv.slice(2);
     const result = { version: false, configPath: DEFAULT_CONFIG_PATH };
@@ -107,7 +113,12 @@ export function parseArgs(argv) {
             result.version = true;
         } else if (args[i] === '-c' || args[i] === '--config') {
             i += 1;
+            if (args[i] === undefined) {
+                throw new Error(`${args[i - 1]} needs a path to a config file`);
+            }
             result.configPath = args[i];
+        } else {
+            throw new Error(`unknown argument ${args[i]}`);
         }
     }
     return result;
@@ -414,7 +425,14 @@ export class TrafficService {
 }
 
 export function main(argv) {
-    const args = parseArgs(argv);
+    let args;
+    try {
+        args = parseArgs(argv);
+    } catch (err) {
+        console.log(`${err.message}
+usage: ${DEVICE_ID} [--version] [-c <config>]`);
+        return EXIT_INVALID_ARGUMENT;
+    }
 
     if (args.version) {
         console.log(VERSION);
