@@ -5,7 +5,10 @@
 export DH_VERBOSE = 1
 
 PACKAGE := wb-nodejs-service-template
-VERSION := $(shell dpkg-parsechangelog --show-field Version | sed 's/-[^-]*$$//')
+# Everything from the first tilde on is the suffix a branch or PR build adds, and npm
+# rejects it: the release part alone goes into the code. Same rule as
+# parse_changelog_version in the Python template.
+VERSION := $(shell dpkg-parsechangelog --show-field Version | sed 's/~.*//')
 
 %:
 	dh $@
