@@ -339,12 +339,11 @@ export class TrafficService {
      */
     onMessage(topic) {
         if (topic !== RESET_TOPIC) {
-            return false;
+            return;
         }
         this.peak = 0;
         this.client.publish(controlTopic(CONTROL.peak), '0', { retain: true });
         this.log('debug', 'peak reset from the web interface');
-        return true;
     }
 
     onClose() {

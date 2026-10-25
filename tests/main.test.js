@@ -122,10 +122,11 @@ test('a press of the button resets the peak, other topics are ignored', () => {
     service.client = fakeClient();
     service.peak = 42;
 
-    assert.equal(service.onMessage('/devices/other/controls/relay/on'), false);
+    service.onMessage('/devices/other/controls/relay/on');
     assert.equal(service.peak, 42);
+    assert.equal(service.client.sent.length, 0);
 
-    assert.equal(service.onMessage(RESET_TOPIC), true);
+    service.onMessage(RESET_TOPIC);
     assert.equal(service.peak, 0);
     assert.ok(service.client.sent.some((m) => m.topic.endsWith(CONTROL.peak) && m.payload === '0'));
 });
