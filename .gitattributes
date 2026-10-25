@@ -30,7 +30,10 @@ copyright text=auto eol=lf
 changelog text=auto eol=lf
 control text=auto eol=lf
 rules text=auto eol=lf
-postrm text=auto eol=lf
+*.postrm text=auto eol=lf
+
+# Binary, so git must not touch the bytes
+*.png binary
 
 # By file extension, in any folder
 *.md text=auto eol=lf
