@@ -15,14 +15,15 @@ VERSION := $(shell dpkg-parsechangelog --show-field Version | sed 's/~.*//')
 
 override_dh_auto_build:
 	npm ci --omit=dev --no-audit --no-fund
-	# Runtime needs neither sourcemaps, nor type declarations, nor the CommonJS
-	# build: the service is ESM. On the mqtt tree of this template that is
-	# 7.8 MB -> 3.9 MB; on a heavier one the saving is proportionally bigger.
-	# NOTE: do not strip src/ across the tree — some packages (debug) point their
-	# entry point there and the tree stops loading.
+	# Runtime needs neither sourcemaps nor type declarations: the service is ESM
+	# and nothing type-checks on the controller. On the mqtt tree of this template
+	# that is 8 MB -> 4 MB and 1310 files -> 827; on a heavier one, proportionally
+	# more.
+	# NOTE: resist pruning further by directory name. Dropping every cjs/ breaks a
+	# package whose "node" export condition points there (rxjs), and dropping src/
+	# breaks one that points its entry point there (debug).
 	find node_modules -name '*.map' -delete
 	find node_modules \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' \) -delete
-	find node_modules -type d -name cjs -prune -exec rm -rf {} +
 	# Development leftovers of the dependencies. The eslint configs are not just
 	# dead weight: lintian rejects a package that ships one, with severity error.
 	find node_modules \( -name '.eslintrc*' -o -name '.npmignore' \
