@@ -159,7 +159,10 @@ export function parseRxBytes(procNetDev, iface) {
         if (!rest || name.trim() !== iface) {
             continue;
         }
-        return Number(rest.trim().split(/\s+/)[0]);
+        const bytes = Number(rest.trim().split(/\s+/)[0]);
+        // A line that does not parse is worth the same error as a missing interface:
+        // publishing NaN as a speed would look like a reading, not like a failure.
+        return Number.isFinite(bytes) ? bytes : null;
     }
     return null;
 }
