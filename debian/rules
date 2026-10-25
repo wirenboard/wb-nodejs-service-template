@@ -20,6 +20,14 @@ override_dh_auto_build:
 	find node_modules -name '*.map' -delete
 	find node_modules \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' \) -delete
 	find node_modules -type d -name cjs -prune -exec rm -rf {} +
+	# Development leftovers of the dependencies. The eslint configs are not just
+	# dead weight: lintian rejects a package that ships one, with severity error.
+	find node_modules \( -name '.eslintrc*' -o -name '.npmignore' \
+		-o -name '.travis.yml' -o -name '.prettierrc*' -o -name '.nycrc' \
+		-o -name '.airtap.yml' \) -delete
+	# CLI shims of the dependencies: the service runs none of them, and they are
+	# symlinks to scripts that dh_fixperms leaves non-executable.
+	rm -rf node_modules/.bin
 	# Architecture: all invariant — a native module in the tree would make the
 	# package arch-specific without anyone noticing. Fail the build instead.
 	test -z "$$(find node_modules -name '*.node' -print -quit)"

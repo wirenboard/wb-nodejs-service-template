@@ -30,6 +30,9 @@ const DEVICE_ID = 'wb-nodejs-service-template';
 const DEVICE_TOPIC = `/devices/${DEVICE_ID}`;
 const PROC_NET_DEV = '/proc/net/dev';
 const SIGNALS = ['SIGTERM', 'SIGINT', 'SIGHUP'];
+// A stop must never outlive this, whatever the broker is doing. Without it systemd
+// waits out TimeoutStopSec (90 s by default) and then kills the service.
+const STOP_TIMEOUT_MS = 3000;
 
 // From the quietest to the most talkative. A level lets the user up the detail
 // without a rebuild, and keeps the journal readable the rest of the time.
@@ -174,6 +177,7 @@ export class TrafficService {
         this.config = config;
         this.client = null;
         this.timer = null;
+        this.stopTimer = null;
 
         this.prevBytes = null;
         this.prevAt = 0;
@@ -337,7 +341,11 @@ export class TrafficService {
     }
 
     onDeviceWiped() {
-        this.client.end(false, {}, exitSuccess);
+        clearTimeout(this.stopTimer);
+        this.stopTimer = null;
+        // With no broker there is nothing left to flush, so close hard instead of
+        // waiting for a DISCONNECT that cannot be sent anyway.
+        this.client.end(!this.connected, {}, exitSuccess);
     }
 
     onSignal(signal) {
@@ -348,6 +356,11 @@ export class TrafficService {
         clearInterval(this.timer);
         this.log('info', `got ${signal}, stopping`);
 
+        // Belt and braces: should a publish or the disconnect never report back,
+        // the service still leaves on its own. unref() keeps this timer from
+        // holding the process up when the stop goes the normal way.
+        this.stopTimer = setTimeout(exitSuccess, STOP_TIMEOUT_MS);
+        this.stopTimer.unref();
         this.wipeDevice(this.onDeviceWiped);
     }
 
@@ -361,6 +374,13 @@ export class TrafficService {
             will: {
                 topic: `${DEVICE_TOPIC}/meta/error`, payload: 'service died', retain: true, qos: 0,
             },
+            // Do not keep QoS 0 messages while the broker is away. A reconnect
+            // republishes the whole device, so measurements taken meanwhile are
+            // worthless, and the queue they go into has no limit. It also makes
+            // publish report back at once instead of never, which is what lets the
+            // service stop while the broker is down instead of hanging until
+            // systemd kills it.
+            queueQoSZero: false,
         });
 
         this.client.on('connect', this.onConnect);

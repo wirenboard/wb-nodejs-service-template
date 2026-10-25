@@ -135,6 +135,23 @@ test('the error of a control is written only when it changes', () => {
     assert.deepEqual(errors().map((m) => m.payload), ['r', '']);
 });
 
+test('a stop without a broker closes the client instead of waiting', () => {
+    // The broker is gone, so publishing reports an error at once and there is no
+    // DISCONNECT to send: the client has to be closed by force. Getting this wrong
+    // costs a 90 second systemctl stop and a SIGKILL on every broker restart.
+    const service = new TrafficService(CONFIG);
+    let forced = null;
+    service.client = {
+        publish: (topic, payload, options, done) => done && done(new Error('No connection to broker')),
+        end: (force) => { forced = force; },
+    };
+
+    service.onSignal('SIGTERM');
+
+    assert.equal(forced, true);
+    assert.equal(service.stopTimer, null, 'the stop deadline must be cleared');
+});
+
 test('the log level decides what is printed', () => {
     // A quiet service still reports errors; a talkative one reports everything.
     assert.equal(shouldLog('error', 'error'), true);
