@@ -544,8 +544,10 @@ sudo apt install ../wb-nodejs-service-template_*.deb
 systemctl status wb-nodejs-service-template
 ```
 
-Build-зависимости ставятся один раз: `sudo mk-build-deps -ir debian/control`. Полная
-приёмка на чистом контроллере — ниже, в «Проверке сборки на контроллере».
+Build-зависимостей у нас две — `debhelper-compat` и нода, — и на контроллере они уже
+стоят: `dpkg-checkbuilddeps` молчит. `mk-build-deps` из `devscripts` понадобится, только
+когда зависимостей станет много: он тянет под две сотни пакетов и 138 МБ. Полная приёмка
+на чистом контроллере — ниже, в «Проверке сборки на контроллере».
 
 ### Чеклист
 
@@ -565,23 +567,29 @@ Build-зависимости ставятся один раз: `sudo mk-build-de
 
 ### Проверка сборки на контроллере
 
-Выполняется на самом Wiren Board (арх `all`, подойдёт любой).
-Репозитории WB на контроллере должны быть настроены — из них тянется нода нужной версии.
+Выполняется на самом Wiren Board (арх `all`, подойдёт любой). Нужны две вещи:
+настроенные репозитории WB — из них приезжает нода нужной версии — и выход в интернет:
+сборка тянет зависимости с `registry.npmjs.org`. Проверить доступ: `npm ping`.
+
+**Собирать в `/mnt/data`.** На корневом разделе свободно меньше гигабайта, а дерево
+зависимостей во время сборки существует в двух экземплярах — исходном и установленном
+в `debian/<пакет>/`. Для шаблона это 15 МБ, для сервиса потяжелее — сотни.
 
 ```bash
 # 1. Инструменты сборки (один раз на контроллер)
 sudo apt update
-sudo apt install -y debhelper devscripts equivs git
+sudo apt install -y git debhelper
 
 # 2. Копия из своей ветки
+cd /mnt/data
 GIT_BRANCH_NAME="feature/branch-name"
 git clone -b "${GIT_BRANCH_NAME}" --single-branch \
   https://github.com/wirenboard/wb-nodejs-service-template.git
 cd wb-nodejs-service-template
 
-# 3. Build-зависимости из debian/control и сборка пакета
-sudo mk-build-deps -ir debian/control
-dpkg-buildpackage -us -uc -b
+# 3. Сборка пакета
+dpkg-checkbuilddeps           # должна молчать: debhelper и нода уже стоят
+dpkg-buildpackage -us -uc -b  # на wb7 около полутора минут
 ```
 
 Далее нужно проверить что пакета корректно собран и сервис поднимается сам
