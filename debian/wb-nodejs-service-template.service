@@ -1,5 +1,5 @@
 [Unit]
-Description=WB Node.js Service Template
+Description=Network traffic of the controller as a virtual device
 After=NetworkManager.service mosquitto.service
 
 [Service]

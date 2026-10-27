@@ -19,7 +19,7 @@ Description: Network traffic of the controller as a device
  that resets the peak, so the traffic of the controller is visible in the web
  interface and usable in rules.
  .
- The package doubles as the template of a Node.js service for Wiren Board: the
- systemd unit, the config with a schema for the web interface, the tests and the
- packaging are meant to be copied. Dependencies are vendored at build time, so
- the controller needs no network and no compilation.
+ Dependencies are vendored at build time, so the controller needs no network
+ and no compilation.
+ .
+ The package doubles as the template a Node.js service of ours is started from.

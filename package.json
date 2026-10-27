@@ -2,7 +2,7 @@
   "name": "wb-nodejs-service-template",
   "version": "0.0.0",
   "private": true,
-  "description": "Template of a Node.js service for Wiren Board",
+  "description": "Network traffic of the controller as a virtual device",
   "type": "module",
   "main": "src/main.js",
   "scripts": {
