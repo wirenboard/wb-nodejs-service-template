@@ -50,7 +50,6 @@ export const CONTROL = {
 };
 
 export const DEVICE = {
-    id: DEVICE_ID,
     title: { en: 'Network traffic', ru: 'Сетевой трафик' },
     controls: {
         [CONTROL.rx]: {
@@ -190,8 +189,16 @@ export class TrafficService {
         this.onClose = this.onClose.bind(this);
         this.onError = this.onError.bind(this);
         this.onSignal = this.onSignal.bind(this);
-        this.onTick = this.onTick.bind(this);
+        this.update = this.update.bind(this);
         this.onDeviceWiped = this.onDeviceWiped.bind(this);
+    }
+
+    /**
+     * Every topic of a device is retained, so that a reader that connects later sees
+     * the device instead of waiting for the next tick. Hence the single entry point.
+     */
+    publish(topic, payload, done) {
+        this.client.publish(topic, payload, { retain: true }, done);
     }
 
     /** Prints a message when the configured level is talkative enough. */
@@ -203,15 +210,12 @@ export class TrafficService {
 
     /** Publishes the device, its controls and a clean slate of errors. */
     publishDevice() {
-        this.client.publish(`${DEVICE_TOPIC}/meta`, JSON.stringify({
-            driver: DEVICE.id,
-            title: DEVICE.title,
-        }), { retain: true });
-        this.client.publish(`${DEVICE_TOPIC}/meta/error`, '', { retain: true });
+        this.publish(`${DEVICE_TOPIC}/meta`, JSON.stringify({ driver: DEVICE_ID, title: DEVICE.title }));
+        this.publish(`${DEVICE_TOPIC}/meta/error`, '');
 
         for (const [control, meta] of Object.entries(DEVICE.controls)) {
-            this.client.publish(`${controlTopic(control)}/meta`, JSON.stringify(meta), { retain: true });
-            this.client.publish(`${controlTopic(control)}/meta/error`, '', { retain: true });
+            this.publish(`${controlTopic(control)}/meta`, JSON.stringify(meta));
+            this.publish(`${controlTopic(control)}/meta/error`, '');
         }
         this.rxError = false;
     }
@@ -223,11 +227,11 @@ export class TrafficService {
      */
     wipeDevice(done) {
         for (const control of Object.keys(DEVICE.controls)) {
-            this.client.publish(controlTopic(control), '', { retain: true });
-            this.client.publish(`${controlTopic(control)}/meta`, '', { retain: true });
-            this.client.publish(`${controlTopic(control)}/meta/error`, '', { retain: true });
+            this.publish(controlTopic(control), '');
+            this.publish(`${controlTopic(control)}/meta`, '');
+            this.publish(`${controlTopic(control)}/meta/error`, '');
         }
-        this.client.publish(`${DEVICE_TOPIC}/meta`, '', { retain: true }, done);
+        this.publish(`${DEVICE_TOPIC}/meta`, '', done);
     }
 
     /** Measures the rate and publishes it. The work of the service. */
@@ -242,8 +246,7 @@ export class TrafficService {
             this.log('error', `cannot read ${PROC_NET_DEV}: ${err.code || err.message}`);
         }
 
-        this.client.publish(controlTopic(CONTROL.uptime),
-            String(Math.round((now - this.startedAt) / 1000)), { retain: true });
+        this.publish(controlTopic(CONTROL.uptime), String(Math.round((now - this.startedAt) / 1000)));
 
         if (rx === null) {
             // A typo in the config marks the control; it does not kill the service.
@@ -257,8 +260,8 @@ export class TrafficService {
             const speed = speedKib(this.prevBytes, rx, now - this.prevAt);
 
             this.peak = Math.max(this.peak, speed);
-            this.client.publish(controlTopic(CONTROL.rx), String(speed), { retain: true });
-            this.client.publish(controlTopic(CONTROL.peak), String(this.peak), { retain: true });
+            this.publish(controlTopic(CONTROL.rx), String(speed));
+            this.publish(controlTopic(CONTROL.peak), String(this.peak));
 
             this.log('debug', `${this.config.interface}: ${speed} KiB/s, peak ${this.peak} KiB/s`);
         }
@@ -272,7 +275,7 @@ export class TrafficService {
             return;
         }
         this.rxError = failed;
-        this.client.publish(`${controlTopic(CONTROL.rx)}/meta/error`, failed ? 'r' : '', { retain: true });
+        this.publish(`${controlTopic(CONTROL.rx)}/meta/error`, failed ? 'r' : '');
     }
 
     onConnect() {
@@ -289,13 +292,9 @@ export class TrafficService {
         this.update();
 
         clearInterval(this.timer);
-        this.timer = setInterval(this.onTick, this.config.update_interval * 1000);
+        this.timer = setInterval(this.update, this.config.update_interval * 1000);
 
         this.client.subscribe(RESET_TOPIC);
-    }
-
-    onTick() {
-        this.update();
     }
 
     /** Only the button is listened to; a service ignores what it did not ask for. */
@@ -304,7 +303,7 @@ export class TrafficService {
             return;
         }
         this.peak = 0;
-        this.client.publish(controlTopic(CONTROL.peak), '0', { retain: true });
+        this.publish(controlTopic(CONTROL.peak), '0');
         this.log('debug', 'peak reset from the web interface');
     }
 

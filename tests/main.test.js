@@ -41,10 +41,21 @@ const NET_DEV = [
 
 const CONFIG = { interface: 'eth0', update_interval: 1, log_level: 'info' };
 
-// Collects what the service would publish, so the tests need no broker.
-function fakeClient() {
-    const sent = [];
-    return { sent, publish: (topic, payload) => sent.push({ topic, payload }) };
+/**
+ * Stands in for the MQTT client, so the tests need no broker. It collects what was
+ * published and how the client was closed; `offline` makes a publish fail the way a
+ * client with no connection does.
+ */
+function fakeClient({ offline = false } = {}) {
+    const client = { sent: [], ended: null };
+    client.publish = (topic, payload, options, done) => {
+        client.sent.push({ topic, payload });
+        if (done) {
+            done(offline ? new Error('No connection to broker') : undefined);
+        }
+    };
+    client.end = (force) => { client.ended = { force }; };
+    return client;
 }
 
 function configFile(body) {
@@ -147,15 +158,11 @@ test('a stop without a broker closes the client instead of waiting', () => {
     // Getting this wrong costs a 90 second systemctl stop and a SIGKILL every time
     // the broker restarts: with no connection the client has to be closed by force.
     const service = new TrafficService(CONFIG);
-    let forced = null;
-    service.client = {
-        publish: (topic, payload, options, done) => done && done(new Error('No connection to broker')),
-        end: (force) => { forced = force; },
-    };
+    service.client = fakeClient({ offline: true });
 
     service.onSignal('SIGTERM');
 
-    assert.equal(forced, true);
+    assert.equal(service.client.ended.force, true);
     assert.equal(service.stopTimer, null, 'the stop deadline must be cleared');
 });
 
