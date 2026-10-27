@@ -27,10 +27,10 @@ export const EXIT_INVALID_ARGUMENT = 2;
 export const EXIT_CONFIG_ERROR = 6;
 
 export const DEFAULT_CONFIG_PATH = '/etc/wb-nodejs-service-template.conf';
-// Services of Wiren Board talk to the local broker over its unix socket, the same
-// default as wb_common.MQTTClient in the Python template. The socket needs no
-// network stack and no open TCP port, and its permissions are the access control.
-const BROKER_SOCKET = '/var/run/mosquitto/mosquitto.sock';
+// The local broker's unix socket, same address as wb_common's DEFAULT_BROKER_URL in
+// the Python template. The +unix suffix is what mqtt.js documents for a socket;
+// without it the client silently connects over TCP instead.
+const BROKER_URL = 'mqtt+unix:///var/run/mosquitto/mosquitto.sock';
 const DEVICE_ID = 'wb-nodejs-service-template';
 const DEVICE_TOPIC = `/devices/${DEVICE_ID}`;
 const PROC_NET_DEV = '/proc/net/dev';
@@ -392,12 +392,7 @@ export class TrafficService {
      * a crash of the service on its own.
      */
     run() {
-        // The +unix suffix is what makes mqtt.js keep `path` and hand it to
-        // net.createConnection. Without it the option is deleted without a word and
-        // the client quietly connects over TCP instead.
-        this.client = mqtt.connect({
-            protocol: 'mqtt+unix',
-            path: BROKER_SOCKET,
+        this.client = mqtt.connect(BROKER_URL, {
             // An error topic carries the flags r, w and p, not prose: see the Wiren
             // Board conventions, section Errors. 'r' is the closest for a service that
             // died, the values it published are the last known good ones.
