@@ -1,13 +1,8 @@
 /**
- * Wiren Board service: incoming network traffic of the controller.
+ * Wiren Board service: incoming network traffic of the controller, as a virtual
+ * device. How a service of ours is built: docs/wb-service-guide.md.
  *
- * Publishes a virtual device with the current receive rate of an interface, the
- * peak rate since the last reset and the service uptime, and refreshes them on
- * the interval from the config.
- *
- * The module is import-safe on purpose: importing it must not read the config,
- * open sockets or start anything. Only the guard at the bottom runs the service,
- * so tests can call main() directly and check the exit code.
+ * Importing this module must start nothing — the tests call main() directly.
  */
 
 import fs from 'node:fs';
@@ -16,34 +11,27 @@ import { pathToFileURL } from 'node:url';
 
 import mqtt from 'mqtt';
 
-// LSB exit codes, the same set as in the Python template: a service of Wiren
-// Board answers with the same codes whatever it is written in.
+// LSB codes, the same set as the Python template. 2 and 6 are in the unit's
+// RestartPreventExitStatus: a restart would only loop.
 export const EXIT_SUCCESS = 0;
 export const EXIT_FAILURE = 1;
-// Both are listed in RestartPreventExitStatus in the unit: restarting a service
-// started with the wrong arguments or left with a broken config changes nothing,
-// it would only loop.
 export const EXIT_INVALID_ARGUMENT = 2;
 export const EXIT_CONFIG_ERROR = 6;
 
 export const DEFAULT_CONFIG_PATH = '/etc/wb-nodejs-service-template.conf';
-// The local broker's unix socket, same address as wb_common's DEFAULT_BROKER_URL in
-// the Python template. The +unix suffix is what mqtt.js documents for a socket;
-// without it the client silently connects over TCP instead.
+// Same address as wb_common's DEFAULT_BROKER_URL. Drop the +unix suffix and mqtt.js
+// throws the path away and connects over TCP without a word.
 const BROKER_URL = 'mqtt+unix:///var/run/mosquitto/mosquitto.sock';
 const DEVICE_ID = 'wb-nodejs-service-template';
 const DEVICE_TOPIC = `/devices/${DEVICE_ID}`;
 const PROC_NET_DEV = '/proc/net/dev';
 const SIGNALS = ['SIGTERM', 'SIGINT', 'SIGHUP'];
-// A stop must never outlive this, whatever the broker is doing. Without it systemd
-// waits out TimeoutStopSec (90 s by default) and then kills the service.
+// A stop must never outlive this, or systemd waits out TimeoutStopSec and kills us.
 const STOP_TIMEOUT_MS = 3000;
-// setInterval keeps its delay in a signed 32-bit integer of milliseconds. A larger
-// one silently becomes 1 ms, and the service hammers the interface every tick.
+// Above this setInterval overflows its 32-bit delay and fires every millisecond.
 const MAX_UPDATE_INTERVAL_S = 2147483;
 
-// From the quietest to the most talkative. A level lets the user up the detail
-// without a rebuild, and keeps the journal readable the rest of the time.
+// From the quietest to the most talkative.
 export const LOG_LEVELS = ['error', 'info', 'debug'];
 const DEFAULT_LOG_LEVEL = 'info';
 
@@ -51,12 +39,8 @@ const DEFAULT_LOG_LEVEL = 'info';
 export const VERSION = '0.0.0-dev';
 
 /**
- * The whole virtual device in one place: its title and every control with the
- * metadata the web interface needs. Publishing, wiping on stop and building
- * topics are derived from this, so a new control is added here only.
- *
- * reset_peak is the one writable control: pressed in the web interface, it drops
- * the peak back to zero. Commands arrive in the control's /on topic.
+ * The whole device in one place. Publishing, wiping and topic building are derived
+ * from it, so a control is added here and nowhere else.
  */
 export const CONTROL = {
     rx: 'rx_speed',
@@ -124,23 +108,19 @@ export function parseArgs(argv) {
     return result;
 }
 
-/**
- * Reads and checks the config. Throws on a missing file, broken JSON or a bad
- * value; the caller turns that into EXIT_CONFIG_ERROR.
- */
+/** Reads and checks the config; throws, and the caller returns EXIT_CONFIG_ERROR. */
 export function loadConfig(path) {
     const config = JSON.parse(fs.readFileSync(path, 'utf8'));
 
     if (typeof config.interface !== 'string' || config.interface === '') {
         throw new Error('interface must be the name of a network interface');
     }
-    // Whole seconds, like the schema the web interface validates against: a config
-    // the interface refuses must not be accepted from the file either.
+    // Whole seconds, as in the schema: what the web interface refuses, the file too.
     if (!Number.isInteger(config.update_interval) || config.update_interval < 1
         || config.update_interval > MAX_UPDATE_INTERVAL_S) {
         throw new Error(`update_interval must be a whole number of seconds between 1 and ${MAX_UPDATE_INTERVAL_S}`);
     }
-    // Optional: the quiet default suits a service nobody is debugging right now.
+    // Optional, and quiet by default.
     config.log_level = config.log_level ?? DEFAULT_LOG_LEVEL;
     if (!LOG_LEVELS.includes(config.log_level)) {
         throw new Error(`log_level must be one of ${LOG_LEVELS.join(', ')}`);
@@ -149,9 +129,9 @@ export function loadConfig(path) {
 }
 
 /**
- * Pulls the received byte counter of an interface out of /proc/net/dev.
- * Returns null when there is no such interface — a wrong name in the config is
- * worth an error on the control, not a dead service.
+ * Received byte counter of an interface, out of /proc/net/dev. null when there is
+ * no such interface or the line makes no sense: that marks the control, not kills
+ * the service.
  */
 export function parseRxBytes(procNetDev, iface) {
     for (const line of procNetDev.split('\n')) {
@@ -160,8 +140,7 @@ export function parseRxBytes(procNetDev, iface) {
             continue;
         }
         const bytes = Number(rest.trim().split(/\s+/)[0]);
-        // A line that does not parse is worth the same error as a missing interface:
-        // publishing NaN as a speed would look like a reading, not like a failure.
+        // NaN published as a speed would read as a measurement, not as a failure.
         return Number.isFinite(bytes) ? bytes : null;
     }
     return null;
@@ -173,11 +152,8 @@ export function shouldLog(configured, level) {
 }
 
 /**
- * Receive rate between two samples of the byte counter, in KiB/s.
- *
- * The counter is reset by a reboot and wraps around on 32-bit kernels, so a
- * value lower than the previous one means a restart of the count, not negative
- * traffic: such a sample reports zero instead of a wild number.
+ * Receive rate between two samples of the byte counter, in KiB/s. A counter that
+ * went backwards (reboot, 32-bit wrap) reports zero, not negative traffic.
  */
 export function speedKib(prevBytes, bytes, elapsedMs) {
     if (elapsedMs <= 0 || bytes < prevBytes) {
@@ -190,11 +166,7 @@ function exitSuccess() {
     process.exit(EXIT_SUCCESS);
 }
 
-/**
- * The service itself: the MQTT client, the state that has to survive between two
- * measurements, and the handlers. Laid out like the classes of the Python
- * template, so both templates read the same way.
- */
+/** The service: the client, the state kept between measurements, the handlers. */
 export class TrafficService {
     constructor(config) {
         this.config = config;
@@ -212,8 +184,7 @@ export class TrafficService {
         this.wasDisconnected = false;
         this.rxError = false;
 
-        // Handlers are passed to the client by reference, and a method loses its
-        // this when it is. Bind once here instead of at every subscription.
+        // Handlers travel by reference, and a method loses its this on the way.
         this.onConnect = this.onConnect.bind(this);
         this.onMessage = this.onMessage.bind(this);
         this.onClose = this.onClose.bind(this);
@@ -230,11 +201,7 @@ export class TrafficService {
         }
     }
 
-    /**
-     * Publishes the device, every control with its metadata, and a clean slate of
-     * errors: an error of a previous run is retained on the broker and would stay
-     * on the control for good.
-     */
+    /** Publishes the device, its controls and a clean slate of errors. */
     publishDevice() {
         this.client.publish(`${DEVICE_TOPIC}/meta`, JSON.stringify({
             driver: DEVICE.id,
@@ -250,14 +217,14 @@ export class TrafficService {
     }
 
     /**
-     * Wipes the retained topics of the device, so it leaves the web interface on
-     * a clean stop instead of hanging there with stale values.
+     * Empties every retained topic of the device, so it leaves the web interface
+     * instead of hanging there with stale values. An error left behind would hang
+     * there too, hence meta/error.
      */
     wipeDevice(done) {
         for (const control of Object.keys(DEVICE.controls)) {
             this.client.publish(controlTopic(control), '', { retain: true });
             this.client.publish(`${controlTopic(control)}/meta`, '', { retain: true });
-            // An error set earlier would otherwise stay on the broker as an orphan.
             this.client.publish(`${controlTopic(control)}/meta/error`, '', { retain: true });
         }
         this.client.publish(`${DEVICE_TOPIC}/meta`, '', { retain: true }, done);
@@ -279,8 +246,7 @@ export class TrafficService {
             String(Math.round((now - this.startedAt) / 1000)), { retain: true });
 
         if (rx === null) {
-            // A wrong interface name is a config mistake, but the service keeps the
-            // device alive and marks the control instead of dying.
+            // A typo in the config marks the control; it does not kill the service.
             this.log('error', `no interface ${this.config.interface} in ${PROC_NET_DEV}`);
             this.setRxError(true);
             return;
@@ -312,8 +278,7 @@ export class TrafficService {
     onConnect() {
         this.connected = true;
         if (this.wasDisconnected) {
-            // The broker drops the session of a client it lost, so the device has
-            // to be published again after every reconnect, not just at start.
+            // The broker drops the session of a client it lost, so publish again.
             this.log('info', 'reconnected, republishing the device');
         } else {
             this.log('info', `connected to the broker, watching ${this.config.interface}`
@@ -333,10 +298,7 @@ export class TrafficService {
         this.update();
     }
 
-    /**
-     * Only the button is listened to, everything else is ignored: a service must
-     * not react to topics it did not ask for.
-     */
+    /** Only the button is listened to; a service ignores what it did not ask for. */
     onMessage(topic) {
         if (topic !== RESET_TOPIC) {
             return;
@@ -347,8 +309,7 @@ export class TrafficService {
     }
 
     onClose() {
-        // Also fires after a failed connection attempt, when there was nothing to
-        // lose yet; only a connection that existed is worth reporting.
+        // Fires on a failed attempt too, when there was nothing to lose yet.
         if (!this.connected) {
             return;
         }
@@ -365,8 +326,8 @@ export class TrafficService {
     onDeviceWiped() {
         clearTimeout(this.stopTimer);
         this.stopTimer = null;
-        // With no broker there is nothing left to flush, so close hard instead of
-        // waiting for a DISCONNECT that cannot be sent anyway.
+        // Nothing to flush without a broker: close hard rather than wait for a
+        // DISCONNECT that cannot be sent.
         this.client.end(!this.connected, {}, exitSuccess);
     }
 
@@ -378,33 +339,22 @@ export class TrafficService {
         clearInterval(this.timer);
         this.log('info', `got ${signal}, stopping`);
 
-        // Belt and braces: should a publish or the disconnect never report back,
-        // the service still leaves on its own. unref() keeps this timer from
-        // holding the process up when the stop goes the normal way.
+        // Belt and braces, should a publish or the disconnect never report back.
         this.stopTimer = setTimeout(exitSuccess, STOP_TIMEOUT_MS);
         this.stopTimer.unref();
         this.wipeDevice(this.onDeviceWiped);
     }
 
-    /**
-     * Connects to the broker and keeps the device up to date until a signal
-     * arrives. The Last Will is written before connecting, so the broker reports
-     * a crash of the service on its own.
-     */
+    /** Connects and keeps the device up to date until a signal arrives. */
     run() {
         this.client = mqtt.connect(BROKER_URL, {
-            // An error topic carries the flags r, w and p, not prose: see the Wiren
-            // Board conventions, section Errors. 'r' is the closest for a service that
-            // died, the values it published are the last known good ones.
+            // Registered before connecting, so the broker reports a crash itself.
+            // An error topic carries the conventions' flags r, w, p, not prose.
             will: {
                 topic: `${DEVICE_TOPIC}/meta/error`, payload: 'r', retain: true, qos: 0,
             },
-            // Do not keep QoS 0 messages while the broker is away. A reconnect
-            // republishes the whole device, so measurements taken meanwhile are
-            // worthless, and the queue they go into has no limit. It also makes
-            // publish report back at once instead of never, which is what lets the
-            // service stop while the broker is down instead of hanging until
-            // systemd kills it.
+            // Never queue what the broker missed: a reconnect republishes anyway,
+            // and a queued publish never calls back, which hangs the stop.
             queueQoSZero: false,
         });
 
@@ -447,8 +397,7 @@ usage: ${DEVICE_ID} [--version] [-c <config>]`);
     try {
         new TrafficService(config).run();
     } catch (err) {
-        // Everything after the connect is retried by the client itself; this
-        // catches what breaks before the event loop even starts.
+        // Only what breaks before the event loop: the rest the client retries.
         console.log(`cannot start: ${err.message}`);
         return EXIT_FAILURE;
     }

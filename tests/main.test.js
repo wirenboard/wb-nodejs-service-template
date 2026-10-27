@@ -1,13 +1,9 @@
 /**
- * Unit tests of the service.
+ * Unit tests of the service. One test per behaviour, not per case; names follow
+ * the Python template, see docs/wb-service-guide.md.
  *
- * They import main.js and call its functions, which only works because the module
- * starts nothing on import and main() returns an exit code instead of calling
- * process.exit. Keep it that way.
- *
- * One test per behaviour, not per case: related cases are asserted together, so
- * the list stays readable. Test names repeat the wording of the Python template,
- * see docs/wb-service-guide.md, "Как именуем тесты".
+ * They import main.js, so it must start nothing on import and main() must return
+ * a code rather than call process.exit. Keep it that way.
  */
 
 import { test } from 'node:test';
@@ -132,8 +128,7 @@ test('a press of the button resets the peak, other topics are ignored', () => {
 });
 
 test('the error of a control is written only when it changes', () => {
-    // An empty error published on every tick is noise on the bus; a stale one left
-    // by a previous run has to be cleared once, when the device is published.
+    // An empty error on every tick is noise; one left by a previous run must go.
     const service = new TrafficService(CONFIG);
     service.client = fakeClient();
     const errors = () => service.client.sent.filter((m) => m.topic.endsWith('/meta/error'));
@@ -149,9 +144,8 @@ test('the error of a control is written only when it changes', () => {
 });
 
 test('a stop without a broker closes the client instead of waiting', () => {
-    // The broker is gone, so publishing reports an error at once and there is no
-    // DISCONNECT to send: the client has to be closed by force. Getting this wrong
-    // costs a 90 second systemctl stop and a SIGKILL on every broker restart.
+    // Getting this wrong costs a 90 second systemctl stop and a SIGKILL every time
+    // the broker restarts: with no connection the client has to be closed by force.
     const service = new TrafficService(CONFIG);
     let forced = null;
     service.client = {
