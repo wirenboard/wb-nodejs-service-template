@@ -2,7 +2,7 @@
  * Wiren Board service: incoming network traffic of the controller, as a virtual
  * device. How a service of ours is built: docs/wb-service-guide.md.
  *
- * Importing this module must start nothing — the tests call main() directly.
+ * Importing this module must start nothing -- the tests call main() directly.
  */
 
 import fs from 'node:fs';

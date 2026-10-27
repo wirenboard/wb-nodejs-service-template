@@ -32,7 +32,7 @@ override_dh_auto_build:
 	# CLI shims of the dependencies: the service runs none of them, and they are
 	# symlinks to scripts that dh_fixperms leaves non-executable.
 	rm -rf node_modules/.bin
-	# Architecture: all invariant — a native module in the tree would make the
+	# Architecture: all invariant -- a native module in the tree would make the
 	# package arch-specific without anyone noticing. Fail the build instead.
 	test -z "$$(find node_modules -name '*.node' -print -quit)"
 	# CRA: ship a CycloneDX SBOM of the vendored tree. npm sbom refuses to run
