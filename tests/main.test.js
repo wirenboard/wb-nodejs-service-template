@@ -18,6 +18,7 @@ import {
     EXIT_INVALID_ARGUMENT,
     EXIT_SUCCESS,
     CONTROL,
+    controlTopic,
     DEVICE,
     LOG_LEVELS,
     RESET_TOPIC,
@@ -152,6 +153,32 @@ test('the error of a control is written only when it changes', () => {
     service.setRxError(true);
     service.setRxError(false);
     assert.deepEqual(errors().map((m) => m.payload), ['r', '']);
+});
+
+test('a stop takes the device out of the web interface', () => {
+    // The convention says a service that stopped on purpose leaves no retained
+    // topics behind, or homeui keeps showing a dead device with its last values.
+    // Until now this was only checked by hand on a controller.
+    const service = new TrafficService(CONFIG);
+    service.client = fakeClient();
+
+    service.publishDevice();
+    service.publish(controlTopic(CONTROL.peak), '7');
+    const retained = new Set(service.client.sent.filter((m) => m.payload !== '').map((m) => m.topic));
+    assert.ok(retained.size > 0, 'nothing was published, the test checks nothing');
+
+    service.client.sent.length = 0;
+    let wiped = 0;
+    service.wipeDevice(() => { wiped += 1; });
+
+    const emptied = service.client.sent.filter((m) => m.payload === '').map((m) => m.topic);
+    for (const topic of retained) {
+        assert.ok(emptied.includes(topic), `${topic} stays in the broker`);
+    }
+    // The device leaves the interface when its own meta goes empty, so that is the
+    // publish the stop waits for, and the callback comes with it.
+    assert.ok(emptied.at(-1).endsWith('/meta') && !emptied.at(-1).includes('/controls/'));
+    assert.equal(wiped, 1);
 });
 
 test('a stop without a broker closes the client instead of waiting', () => {
