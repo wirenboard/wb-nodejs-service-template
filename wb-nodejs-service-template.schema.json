@@ -1,0 +1,60 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type": "object",
+    "title": "Network traffic",
+    "description": "Incoming traffic of an interface, published as a device",
+    "configFile": {
+        "path": "/etc/wb-nodejs-service-template.conf",
+        "service": "wb-nodejs-service-template"
+    },
+    "properties": {
+        "interface": {
+            "title": "Interface",
+            "type": "string",
+            "minLength": 1,
+            "default": "eth0",
+            "description": "Name of the interface to watch, as in /proc/net/dev",
+            "propertyOrder": 1
+        },
+        "update_interval": {
+            "title": "Update interval, s",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483,
+            "default": 1,
+            "description": "How often the rate is measured",
+            "propertyOrder": 2
+        },
+        "log_level": {
+            "title": "Log level",
+            "type": "string",
+            "enum": [
+                "error",
+                "info",
+                "debug"
+            ],
+            "default": "info",
+            "description": "How much the service writes to the journal",
+            "propertyOrder": 3
+        }
+    },
+    "required": [
+        "interface",
+        "update_interval"
+    ],
+    "translations": {
+        "ru": {
+            "Network traffic": "Сетевой трафик",
+            "Incoming traffic of an interface, published as a device": "Входящий трафик интерфейса, опубликованный как устройство",
+            "Interface": "Интерфейс",
+            "Name of the interface to watch, as in /proc/net/dev": "Имя интерфейса, как в /proc/net/dev",
+            "Update interval, s": "Период обновления, с",
+            "How often the rate is measured": "Как часто измеряется скорость",
+            "Log level": "Подробность журнала",
+            "How much the service writes to the journal": "Сколько сервис пишет в журнал",
+            "error": "только ошибки",
+            "info": "обычный",
+            "debug": "отладка"
+        }
+    }
+}

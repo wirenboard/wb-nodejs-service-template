@@ -1,0 +1,16 @@
+.devcontainer/
+.vscode/
+
+# Node
+node_modules/
+sbom.cdx.json
+npm-debug.log*
+
+# Debian build leftovers
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/*.debhelper
+debian/*.debhelper.log
+debian/*.substvars
+debian/wb-nodejs-service-template/

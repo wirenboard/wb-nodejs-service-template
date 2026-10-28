@@ -1,0 +1,42 @@
+# This code runs on a Linux controller. CRLF line endings break shell
+# scripts, the bin entrypoint and systemd units there. So keep LF for
+# every text file, on any OS.
+#
+# More about line endings:
+# https://docs.github.com/en/get-started/getting-started-with-git/configuring-git-to-handle-line-endings
+
+# IMPORTANT: do not use a wildcard like `* text=auto eol=lf`
+# List every file or pattern here by hand
+
+# Root specific files
+.gitignore text=auto eol=lf
+.gitattributes text=auto eol=lf
+.nvmrc text=auto eol=lf
+Jenkinsfile text=auto eol=lf
+package.json text=auto eol=lf
+package-lock.json text=auto eol=lf
+10wb-nodejs-service-template text=auto eol=lf
+
+# Folder ./bin
+bin/wb-nodejs-service-template text=auto eol=lf
+
+# Folder ./hooks
+hooks/pre-push text=auto eol=lf
+
+# Folder ./debian
+*.install text=auto eol=lf
+*.service text=auto eol=lf
+copyright text=auto eol=lf
+changelog text=auto eol=lf
+control text=auto eol=lf
+rules text=auto eol=lf
+*.postrm text=auto eol=lf
+
+# Binary, so git must not touch the bytes
+*.png binary
+
+# By file extension, in any folder
+*.md text=auto eol=lf
+*.js text=auto eol=lf
+*.conf text=auto eol=lf
+*.json text=auto eol=lf

@@ -1,0 +1,7 @@
+bin/wb-nodejs-service-template          usr/bin
+src/*                                   usr/lib/wb-nodejs-service-template
+node_modules                            usr/lib/wb-nodejs-service-template
+sbom.cdx.json                           usr/share/wb-nodejs-service-template
+wb-nodejs-service-template.schema.json  usr/share/wb-mqtt-confed/schemas
+wb-nodejs-service-template.conf         etc
+10wb-nodejs-service-template            etc/wb-configs.d

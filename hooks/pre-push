@@ -1,0 +1,25 @@
+#!/bin/sh
+# Runs the tests before pushing.
+# Enable once per clone:  git config core.hooksPath hooks
+# Skip once:              git push --no-verify
+
+if ! command -v node >/dev/null 2>&1; then
+    echo "pre-push: node not found, tests skipped"
+    exit 0
+fi
+
+# If someone removed the tests from their copy, the hook must still work and not
+# fail. The search is wider than tests/ on purpose, because node --test looks for
+# *.test.js in every directory except node_modules.
+if [ -z "$(find . -name '*.test.js' -not -path './node_modules/*' -print -quit 2>/dev/null)" ]; then
+    echo "pre-push: no JS tests, skipping"
+    exit 0
+fi
+
+echo "pre-push: node --test"
+if ! node --test; then
+    echo ""
+    echo "pre-push: tests failed, push aborted."
+    echo "To push anyway: git push --no-verify"
+    exit 1
+fi

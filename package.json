@@ -1,0 +1,19 @@
+{
+  "name": "wb-nodejs-service-template",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Network traffic of the controller as a virtual device",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "mqtt": "^5.15.1"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "license": "MIT"
+}
