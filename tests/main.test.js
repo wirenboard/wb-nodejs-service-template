@@ -1,9 +1,9 @@
 /**
- * Unit tests of the service. One test per behaviour, not per case; names follow
- * the Python template, see docs/wb-service-guide.md.
+ * Unit tests of the service. One test per behaviour, not per case. How the names are
+ * chosen: docs/wb-service-guide.md.
  *
- * They import main.js, so it must start nothing on import and main() must return
- * a code rather than call process.exit. Keep it that way.
+ * The tests import main.js, so importing it must not start anything, and main() must
+ * return an exit code instead of calling process.exit. Please keep it that way.
  */
 
 import { test } from 'node:test';
@@ -32,7 +32,7 @@ import {
     speedKib,
 } from '../src/main.js';
 
-// Two lines of a real /proc/net/dev, with the header stripped down to what matters.
+// Two lines of a real /proc/net/dev, with a shortened header.
 const NET_DEV = [
     'Inter-|   Receive                                                |  Transmit',
     ' face |bytes    packets errs drop fifo frame compressed multicast|bytes',
@@ -43,9 +43,9 @@ const NET_DEV = [
 const CONFIG = { interface: 'eth0', update_interval: 1, log_level: 'info' };
 
 /**
- * Stands in for the MQTT client, so the tests need no broker. It collects what was
- * published and how the client was closed; `offline` makes a publish fail the way a
- * client with no connection does.
+ * Replaces the MQTT client, so the tests need no broker. It remembers what was
+ * published and how the client was closed. With `offline` a publish fails the same
+ * way as in a client that has no connection.
  */
 function fakeClient({ offline = false } = {}) {
     const client = { sent: [], ended: null };
@@ -72,15 +72,16 @@ test('config path defaults to the packaged one and can be overridden', () => {
 });
 
 test('a command line it does not understand returns invalid argument', () => {
-    // Code 2 is in RestartPreventExitStatus too, so a typo in the unit does not
-    // turn into a restart loop either.
+    // Code 2 is also listed in RestartPreventExitStatus, so a typo in the systemd
+    // unit does not start a restart loop.
     assert.equal(main(['node', 'svc', '--verbose']), EXIT_INVALID_ARGUMENT);
     assert.equal(main(['node', 'svc', '-c']), EXIT_INVALID_ARGUMENT);
 });
 
 test('an unusable config returns config error', () => {
-    // The systemd unit lists code 6 in RestartPreventExitStatus, so every way of
-    // getting the config wrong must end exactly here and not in a restart loop.
+    // The systemd unit lists code 6 in RestartPreventExitStatus. So every mistake in
+    // the config must give exactly this code, otherwise systemd restarts the service
+    // again and again.
     const cases = [
         '/nonexistent/none.conf',
         configFile('{ not json'),
@@ -99,8 +100,8 @@ test('an unusable config returns config error', () => {
 });
 
 test('shipped config is readable and complete', () => {
-    // Reads the real file from the repository, not a temporary one: a typo in the
-    // shipped config would otherwise surface only after installing the package.
+    // Reads the real file from the repository and not a temporary one. A mistake in
+    // the config we ship would otherwise be found only after installing the package.
     const config = loadConfig(path.join(import.meta.dirname, '..', 'wb-nodejs-service-template.conf'));
 
     assert.equal(typeof config.interface, 'string');
@@ -111,21 +112,22 @@ test('shipped config is readable and complete', () => {
 test('received bytes are taken from the right interface', () => {
     assert.equal(parseRxBytes(NET_DEV, 'eth0'), 9876543);
     assert.equal(parseRxBytes(NET_DEV, 'lo'), 1234);
-    // A wrong name in the config must not look like zero traffic.
+    // A wrong interface name in the config must not look like zero traffic.
     assert.equal(parseRxBytes(NET_DEV, 'wlan0'), null);
 });
 
 test('speed is the difference between samples', () => {
     assert.equal(speedKib(0, 102400, 10000), 10);
-    // The counter is reset by a reboot and wraps around on 32-bit kernels, and two
-    // samples can land in the same millisecond: neither is negative traffic.
+    // A reboot sets the counter back to zero, on 32-bit kernels it starts from zero
+    // again after the maximum, and two samples can happen in the same millisecond.
+    // None of this is negative traffic.
     assert.equal(speedKib(5000, 10, 10000), 0);
     assert.equal(speedKib(0, 102400, 0), 0);
 });
 
 test('a press of the button resets the peak, other topics are ignored', () => {
-    // The service is driven directly, with a client that only collects messages:
-    // the handlers are methods, so no broker and no event loop are needed.
+    // The service is used directly, with a client that only remembers messages. The
+    // handlers are methods of the class, so no broker and no event loop are needed.
     const service = new TrafficService(CONFIG);
     service.client = fakeClient();
     service.peak = 42;
@@ -140,7 +142,8 @@ test('a press of the button resets the peak, other topics are ignored', () => {
 });
 
 test('the error of a control is written only when it changes', () => {
-    // An empty error on every tick is noise; one left by a previous run must go.
+    // An empty error on every update is just noise, but an error from a previous run
+    // must be removed.
     const service = new TrafficService(CONFIG);
     service.client = fakeClient();
     const errors = () => service.client.sent.filter((m) => m.topic.endsWith('/meta/error'));
@@ -156,9 +159,9 @@ test('the error of a control is written only when it changes', () => {
 });
 
 test('a stop takes the device out of the web interface', () => {
-    // The convention says a service that stopped on purpose leaves no retained
-    // topics behind, or homeui keeps showing a dead device with its last values.
-    // Until now this was only checked by hand on a controller.
+    // The conventions say that a service stopped on purpose must leave no retained
+    // topics. Otherwise the web interface keeps showing a dead device with its last
+    // values. Until now this was checked only by hand on a controller.
     const service = new TrafficService(CONFIG);
     service.client = fakeClient();
 
@@ -175,15 +178,16 @@ test('a stop takes the device out of the web interface', () => {
     for (const topic of retained) {
         assert.ok(emptied.includes(topic), `${topic} stays in the broker`);
     }
-    // The device leaves the interface when its own meta goes empty, so that is the
-    // publish the stop waits for, and the callback comes with it.
+    // The device disappears from the web interface when its own meta becomes empty.
+    // The stop waits for exactly this publish, and the callback comes with it.
     assert.ok(emptied.at(-1).endsWith('/meta') && !emptied.at(-1).includes('/controls/'));
     assert.equal(wiped, 1);
 });
 
 test('a stop without a broker closes the client instead of waiting', () => {
-    // Getting this wrong costs a 90 second systemctl stop and a SIGKILL every time
-    // the broker restarts: with no connection the client has to be closed by force.
+    // A mistake here costs 90 seconds on every systemctl stop and ends with SIGKILL
+    // each time the broker is restarted. Without a connection the client must be
+    // closed by force.
     const service = new TrafficService(CONFIG);
     service.client = fakeClient({ offline: true });
 
@@ -194,7 +198,7 @@ test('a stop without a broker closes the client instead of waiting', () => {
 });
 
 test('the log level decides what is printed', () => {
-    // A quiet service still reports errors; a talkative one reports everything.
+    // A quiet service still prints errors, a detailed one prints everything.
     assert.equal(shouldLog('error', 'error'), true);
     assert.equal(shouldLog('error', 'info'), false);
     assert.equal(shouldLog('debug', 'debug'), true);
@@ -202,10 +206,10 @@ test('the log level decides what is printed', () => {
 });
 
 test('--version prints the version', (t) => {
-    // The format is not asserted here on purpose: tests run before the build
-    // stamps the version in, so this would only ever see the placeholder. The
-    // real check is npm pkg set version during the build, which rejects what npm
-    // cannot use.
+    // The format is not checked here on purpose. The tests run before the build
+    // writes the real version, so a test would always see the placeholder. The real
+    // check is npm pkg set version during the build: it rejects a version npm cannot
+    // use.
     const printed = [];
     t.mock.method(console, 'log', (line) => printed.push(line));
 

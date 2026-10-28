@@ -1,4 +1,4 @@
 #!/bin/sh
-# Entry point installed into /usr/bin. The code itself lives in /usr/lib,
-# next to the vendored node_modules.
+# This file is installed into /usr/bin and only starts the service. The code itself
+# lives in /usr/lib, next to the copied node_modules.
 exec /usr/bin/node /usr/lib/wb-nodejs-service-template/main.js "$@"
