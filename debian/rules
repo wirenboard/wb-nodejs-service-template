@@ -1,13 +1,13 @@
 #!/usr/bin/make -f
-# The dependencies are vendored into the package: nothing is downloaded or built
-# on the controller. Node.js itself comes from the distribution (Depends: nodejs),
-# so its security updates arrive through the Wiren Board / Debian repository.
+# All dependencies are copied into the package, so the controller downloads and
+# builds nothing. Node.js itself is a separate package (Depends: nodejs) and gets
+# its security updates from the Wiren Board and Debian repositories.
 export DH_VERBOSE = 1
 
 PACKAGE := wb-nodejs-service-template
-# Everything from the first tilde on is the suffix a branch or PR build adds, and npm
-# rejects it: the release part alone goes into the code. Same rule as
-# parse_changelog_version in the Python template.
+# A branch or PR build adds a suffix after a tilde, for example 1.0.0~exp~PR+1.
+# npm does not accept such a version, so everything from the tilde is cut off and
+# only 1.0.0 goes into the code.
 VERSION := $(shell dpkg-parsechangelog --show-field Version | sed 's/~.*//')
 
 %:
@@ -15,44 +15,47 @@ VERSION := $(shell dpkg-parsechangelog --show-field Version | sed 's/~.*//')
 
 override_dh_auto_build:
 	npm ci --omit=dev --no-audit --no-fund
-	# Runtime needs neither sourcemaps nor type declarations: the service is ESM
-	# and nothing type-checks on the controller. On the mqtt tree of this template
-	# that is 8 MB -> 4 MB and 1310 files -> 827; on a heavier one, proportionally
-	# more.
-	# NOTE: resist pruning further by directory name. Dropping every cjs/ breaks a
-	# package whose "node" export condition points there (rxjs), and dropping src/
-	# breaks one that points its entry point there (debug).
+	# Source maps and type declarations are needed only while writing code, not
+	# while running it. For the dependencies of this template that is 8 MB -> 4 MB
+	# and 1310 files -> 827 files.
+	# NOTE: do not delete whole directories by name. Some packages keep the code
+	# they really run in cjs/ (rxjs) or in src/ (debug), so such a rule would break
+	# them.
 	find node_modules -name '*.map' -delete
 	find node_modules \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' \) -delete
-	# Development leftovers of the dependencies. The eslint configs are not just
-	# dead weight: lintian rejects a package that ships one, with severity error.
+	# Files the dependencies need only for development. An eslint config is not only
+	# useless here: lintian reports a package that ships one as an error.
 	find node_modules \( -name '.eslintrc*' -o -name '.npmignore' \
 		-o -name '.travis.yml' -o -name '.prettierrc*' -o -name '.nycrc' \
 		-o -name '.airtap.yml' \) -delete
-	# CLI shims of the dependencies: the service runs none of them, and they are
-	# symlinks to scripts that dh_fixperms leaves non-executable.
+	# Command line tools of the dependencies, for example mqtt_pub. The service never
+	# runs them. The .bin directory holds symlinks to these tools, so readlink gives
+	# the path of every real file: delete the files first, then the links.
+	find node_modules/.bin -type l -exec readlink -f {} + | xargs -r rm -f
 	rm -rf node_modules/.bin
-	# Architecture: all invariant -- a native module in the tree would make the
-	# package arch-specific without anyone noticing. Fail the build instead.
+	# The package says Architecture: all, so it must work on every controller. A
+	# dependency with a compiled *.node module would break that quietly, so stop the
+	# build instead.
 	test -z "$$(find node_modules -name '*.node' -print -quit)"
-	# CRA: ship a CycloneDX SBOM of the vendored tree. npm sbom refuses to run
-	# without a version in package.json, so set the real one and put the
-	# placeholder straight back: a build must not leave the sources modified.
+	# CRA asks for a list of all dependencies in the package, in CycloneDX format.
+	# npm sbom does not run while package.json holds the placeholder version, so the
+	# real version is written, the file is built, and the placeholder is written back:
+	# a build must leave the sources unchanged.
 	npm pkg set version=$(VERSION)
 	npm sbom --sbom-format cyclonedx --omit=dev --omit=optional > sbom.cdx.json
 	npm pkg set version=0.0.0
 
 override_dh_auto_test:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
-	# Bare --test discovers tests/*.test.js itself; a directory argument
-	# is not accepted by every Node version.
+	# node --test finds tests/*.test.js by itself. A directory as an argument does
+	# not work on every version of Node, so it is not used here.
 	node --test
 endif
 
 override_dh_install:
 	dh_install
-	# The single source of the version is debian/changelog. Stamp it into the
-	# installed copy, not into src/: a build must not modify the source tree.
+	# The version lives only in debian/changelog. It is written into the installed
+	# copy of main.js and not into src/, so the sources stay unchanged.
 	sed -i "s/^export const VERSION = .*/export const VERSION = '$(VERSION)';/" \
 		debian/$(PACKAGE)/usr/lib/$(PACKAGE)/main.js
 
