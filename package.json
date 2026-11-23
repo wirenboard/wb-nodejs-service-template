@@ -15,5 +15,5 @@
   "engines": {
     "node": ">=22.13.0"
   },
-  "license": "MIT"
+  "license": "MIT-WB"
 }
